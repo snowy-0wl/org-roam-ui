@@ -27,6 +27,7 @@ import {
 } from '../config'
 
 import FilterPanel from './Filter/FilterPanel'
+import SettingsPanel from './Settings/SettingsPanel'
 
 import { ThemeContext } from '../../util/themecontext'
 import { usePersistantState } from '../../util/persistant-state'
@@ -227,6 +228,17 @@ export const Tweaks = (props: TweakProps) => {
                 mouse={mouse}
                 setMouse={setMouse}
               />
+            </AccordionPanel>
+          </AccordionItem>
+          <AccordionItem>
+            <AccordionButton>
+              <Box flex="1" textAlign="left">
+                Settings
+              </Box>
+              <AccordionIcon />
+            </AccordionButton>
+            <AccordionPanel>
+              <SettingsPanel />
             </AccordionPanel>
           </AccordionItem>
         </Accordion>
