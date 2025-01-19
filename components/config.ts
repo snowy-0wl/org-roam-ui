@@ -28,7 +28,7 @@ export const initialPhysics = {
   alphaMin: 0,
   velocityDecay: 0.25,
   gravity: 0.3,
-  gravityOn: true,
+  gravityOn: false,
   gravityLocal: false,
 }
 

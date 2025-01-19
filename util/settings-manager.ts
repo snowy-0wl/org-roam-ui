@@ -25,7 +25,7 @@ export interface OrgRoamUISettings {
 export const exportSettings = (): string => {
   const settings: OrgRoamUISettings = {
     theme: {
-      colorTheme: localStorage.getItem('colorTheme') || '',
+      colorTheme: localStorage.getItem('colorTheme') || '[]',
       highlightColor: localStorage.getItem('highlightColor') || '',
     },
     layout: {
@@ -52,8 +52,9 @@ export const importSettings = (settingsJson: string): void => {
   try {
     const settings: OrgRoamUISettings = JSON.parse(settingsJson);
     
-    // Theme
-    localStorage.setItem('colorTheme', settings.theme.colorTheme);
+    // Theme - parse it only once
+    const colorTheme = settings.theme.colorTheme;
+    localStorage.setItem('colorTheme', colorTheme);
     localStorage.setItem('highlightColor', settings.theme.highlightColor);
     
     // Layout
