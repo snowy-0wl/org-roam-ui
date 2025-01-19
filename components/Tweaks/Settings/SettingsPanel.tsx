@@ -1,5 +1,5 @@
 import { Box, Button, useToast, VStack, Text } from '@chakra-ui/react';
-import { DownloadIcon, UploadIcon } from '@chakra-ui/icons';
+import { DownloadIcon, ArrowUpIcon } from '@chakra-ui/icons';
 import React, { useRef } from 'react';
 import { exportSettings, importSettings } from '../../../util/settings-manager';
 
@@ -93,7 +93,7 @@ export const SettingsPanel: React.FC = () => {
           Export Settings
         </Button>
         <Button
-          leftIcon={<UploadIcon />}
+          leftIcon={<ArrowUpIcon />}
           colorScheme="blue"
           variant="outline"
           onClick={handleImportClick}

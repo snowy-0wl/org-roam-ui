@@ -27,7 +27,7 @@ import {
 } from '../config'
 
 import FilterPanel from './Filter/FilterPanel'
-import SettingsPanel from './Settings/SettingsPanel'
+import { SettingsPanel } from './Settings/SettingsPanel'
 
 import { ThemeContext } from '../../util/themecontext'
 import { usePersistantState } from '../../util/persistant-state'
