@@ -46,8 +46,20 @@ export const SettingsPanel: React.FC = () => {
     reader.onload = async (e) => {
       try {
         const content = e.target?.result as string;
-        importSettings(content);
         
+        // Show loading toast
+        toast({
+          title: 'Importing settings...',
+          description: 'Please wait while your settings are being imported',
+          status: 'info',
+          duration: 1000,
+          isClosable: false,
+        });
+
+        // Import settings
+        importSettings(content);
+
+        // Show success toast
         toast({
           title: 'Settings imported',
           description: 'Your settings have been imported successfully. Reloading page...',
@@ -56,20 +68,31 @@ export const SettingsPanel: React.FC = () => {
           isClosable: true,
         });
 
-        // Give time for the toast to show before reload
+        // Give more time for the settings to be saved before reload
         setTimeout(() => {
           window.location.reload();
-        }, 2000);
+        }, 3000);
       } catch (error) {
         toast({
           title: 'Import failed',
-          description: 'Failed to import settings. Make sure the file is valid.',
+          description: `Failed to import settings: ${error.message}`,
           status: 'error',
-          duration: 3000,
+          duration: 5000,
           isClosable: true,
         });
       }
     };
+
+    reader.onerror = () => {
+      toast({
+        title: 'Import failed',
+        description: 'Failed to read the settings file',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    };
+
     reader.readAsText(file);
   };
 

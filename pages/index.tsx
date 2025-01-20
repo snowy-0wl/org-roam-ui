@@ -128,6 +128,51 @@ export function GraphPage() {
   const [coloring, setColoring] = usePersistantState('coloring', initialColoring)
   const [local, setLocal] = usePersistantState('local', initialLocal)
 
+  // Add settings update listener
+  useEffect(() => {
+    const handleSettingsUpdate = (event: CustomEvent) => {
+      const { changedKeys } = event.detail;
+      
+      // Update state based on changed settings
+      changedKeys.forEach((key: string) => {
+        const value = JSON.parse(localStorage.getItem(key) ?? 'null');
+        if (!value) return;
+
+        switch (key) {
+          case 'tagCols':
+            setTagColors(value);
+            break;
+          case 'physics':
+            setPhysics(value);
+            break;
+          case 'filter':
+            setFilter(value);
+            break;
+          case 'visuals':
+            setVisuals(value);
+            break;
+          case 'behavior':
+            setBehavior(value);
+            break;
+          case 'mouse':
+            setMouse(value);
+            break;
+          case 'coloring':
+            setColoring(value);
+            break;
+          case 'local':
+            setLocal(value);
+            break;
+        }
+      });
+    };
+
+    window.addEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
+    return () => {
+      window.removeEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
+    };
+  }, [setTagColors, setPhysics, setFilter, setVisuals, setBehavior, setMouse, setColoring, setLocal]);
+
   const [
     previewNodeState,
     {

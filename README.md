@@ -30,6 +30,12 @@ Org-Roam-UI is meant a successor of [org-roam-server](https://github.com/org-roa
 
 For major new features/bugfixes we will update [changelog](https://github.com/org-roam/org-roam-ui/discussions/30).
 
+Recent Updates:
+- Fixed settings import functionality to handle theme changes gracefully
+- Improved error handling and state management during settings updates
+- Added proper validation for imported settings
+- Fixed client-side exceptions during settings import
+
 ## Installation
 
 `org-roam-ui` is on MELPA!

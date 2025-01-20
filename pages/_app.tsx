@@ -29,6 +29,7 @@ function MyApp({ Component, pageProps }: AppProps) {
   }, [highlightColor])
 
   useEffect(() => {
+    // Load initial settings
     setEmacsTheme(
       JSON.parse(localStorage.getItem('colorTheme') ?? JSON.stringify(initialTheme)) ??
         initialTheme,
@@ -38,6 +39,24 @@ function MyApp({ Component, pageProps }: AppProps) {
         highlightColor,
     )
     setIsInitialized(true)
+
+    // Listen for settings updates
+    const handleSettingsUpdate = (event: CustomEvent) => {
+      const { changedKeys } = event.detail;
+      if (changedKeys.includes('colorTheme')) {
+        const newTheme = JSON.parse(localStorage.getItem('colorTheme') ?? JSON.stringify(initialTheme)) ?? initialTheme;
+        setEmacsTheme(newTheme);
+      }
+      if (changedKeys.includes('highlightColor')) {
+        const newColor = JSON.parse(localStorage.getItem('highlightColor') ?? JSON.stringify(highlightColor)) ?? highlightColor;
+        setHighlightColor(newColor);
+      }
+    };
+
+    window.addEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
+    return () => {
+      window.removeEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
+    };
   }, [])
 
   const themeObject = {
