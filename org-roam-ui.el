@@ -33,10 +33,12 @@
 ;;; Code:
 ;;;; Dependencies
 (require 'json)
+(require 'subr-x)
+(defvar org-ref-cite-re)
 (require 'simple-httpd)
 (require 'org-roam)
 (require 'websocket)
-(require 'org-roam-dailies)
+(require 'org-roam-dailies nil t)
 
 (defgroup org-roam-ui nil
   "UI in Org-roam."
@@ -56,10 +58,17 @@
   (expand-file-name "./out/" org-roam-ui-root-dir)
   "Directory containing org-roam-ui's web build.")
 
-;; TODO: make into defcustom
-(defvar org-roam-ui-port
-  35901
-  "Port to serve the org-roam-ui interface.")
+(require 'org-roam-ui-settings)
+
+(defcustom org-roam-ui-port 35901
+  "Port to serve the org-roam-ui interface."
+  :group 'org-roam-ui
+  :type 'integer)
+
+(defcustom org-roam-ui-ws-port 35903
+  "Port for the org-roam-ui websocket server."
+  :group 'org-roam-ui
+  :type 'integer)
 
 (defcustom org-roam-ui-sync-theme t
   "If true, sync your current Emacs theme with `org-roam-ui'.
@@ -167,6 +176,19 @@ This is mostly to prevent issues with EXWM and the Webkit browser.")
 (defvar org-roam-ui-ws-server nil
   "The websocket server for org-roam-ui.")
 
+(defun org-roam-ui--isolate-http-request (handler &rest arguments)
+  "Give each UI request its own response buffer before calling HANDLER.
+The HTTP server dispatches requests through timers.  A callback can run
+while a previous response buffer is current, whose headers are already sent."
+  (if (and (bound-and-true-p org-roam-ui-mode)
+           (stringp httpd-root)
+           (equal (expand-file-name httpd-root)
+                  (expand-file-name org-roam-ui-app-build-dir)))
+      (with-temp-buffer (apply handler arguments))
+    (apply handler arguments)))
+
+(advice-add 'httpd--handle-request :around #'org-roam-ui--isolate-http-request)
+
 ;;;###autoload
 (define-minor-mode
   org-roam-ui-mode
@@ -178,25 +200,36 @@ This serves the web-build and API over HTTP."
   :init-value nil
   (cond
    (org-roam-ui-mode
-   ;;; check if the default keywords actually exist on `orb-preformat-keywords'
-   ;;; else add them
-    (setq-local httpd-port org-roam-ui-port)
-    (setq httpd-root org-roam-ui-app-build-dir)
-    (httpd-start)
-    (setq org-roam-ui-ws-server
-          (websocket-server
-           35903
-           :host 'local
-           :on-open #'org-roam-ui--ws-on-open
-           :on-message #'org-roam-ui--ws-on-message
-           :on-close #'org-roam-ui--ws-on-close))
+    (unless (and org-roam-ui-ws-server (process-live-p org-roam-ui-ws-server))
+      (let (httpd-started)
+        (condition-case err
+            (progn
+              (setq httpd-port org-roam-ui-port
+                    httpd-root org-roam-ui-app-build-dir)
+              (httpd-start)
+              (setq httpd-started t
+                    org-roam-ui-ws-server
+                    (websocket-server
+                     org-roam-ui-ws-port
+                     :host 'local
+                     :on-open #'org-roam-ui--ws-on-open
+                     :on-message #'org-roam-ui--ws-on-message
+                     :on-close #'org-roam-ui--ws-on-close)))
+          ((error quit)
+           (setq org-roam-ui-mode nil
+                 org-roam-ui-ws-server nil
+                 org-roam-ui-ws-socket nil)
+           (when httpd-started (httpd-stop))
+           (signal (car err) (cdr err))))))
     (when org-roam-ui-open-on-start (org-roam-ui-open)))
    (t
-    (progn
-      (websocket-server-close org-roam-ui-ws-server)
-      (httpd-stop)
-      (remove-hook 'after-save-hook #'org-roam-ui--on-save)
-      (org-roam-ui-follow-mode -1)))))
+    (when org-roam-ui-ws-server
+      (websocket-server-close org-roam-ui-ws-server))
+    (setq org-roam-ui-ws-server nil
+          org-roam-ui-ws-socket nil)
+    (httpd-stop)
+    (remove-hook 'after-save-hook #'org-roam-ui--on-save)
+    (org-roam-ui-follow-mode -1))))
 
 (defun org-roam-ui--ws-on-open (ws)
   "Open the websocket WS to org-roam-ui and send initial data."
@@ -210,14 +243,16 @@ This serves the web-build and API over HTTP."
     (when org-roam-ui-follow
       (org-roam-ui-follow-mode 1))))
 
-(defun org-roam-ui--ws-on-message (_ws frame)
+(defun org-roam-ui--ws-on-message (ws frame)
   "Functions to run when the org-roam-ui server receives a message.
 Takes _WS and FRAME as arguments."
   (let* ((msg (json-parse-string
                (websocket-frame-text frame) :object-type 'alist))
          (command (alist-get 'command msg))
          (data (alist-get 'data msg)))
-    (cond ((string= command "open")
+    (cond ((and (stringp command) (string-prefix-p "settings-" command))
+           (org-roam-ui-settings-handle-message ws (websocket-frame-text frame)))
+          ((string= command "open")
            (org-roam-ui--on-msg-open-node data))
           ((string= command "delete")
            (org-roam-ui--on-msg-delete-node data))
@@ -235,7 +270,7 @@ Takes _WS and FRAME as arguments."
           (buf (find-file-noselect (org-roam-node-file node))))
     (run-hook-with-args 'org-roam-ui-before-open-node-functions id)
     (unless (window-live-p org-roam-ui--window)
-      (if-let ((windows (window-list))
+      (if-let* ((windows (window-list))
                (or-windows (seq-filter
                             (lambda (window)
                               (org-roam-buffer-p
@@ -270,8 +305,9 @@ TODO: Be able to delete individual nodes."
      :node (org-roam-node-create :title (alist-get 'title data))
      :props '(:finalize find-file))))
 
-(defun org-roam-ui--ws-on-close (_websocket)
-  "What to do when _WEBSOCKET to org-roam-ui is closed."
+(defun org-roam-ui--ws-on-close (websocket)
+  "Clean up when WEBSOCKET to org-roam-ui is closed."
+  (org-roam-ui-settings-disconnect websocket)
   (remove-hook 'after-save-hook #'org-roam-ui--on-save)
   (org-roam-ui-follow-mode -1)
   (message "Connection with org-roam-ui closed."))
@@ -334,7 +370,7 @@ loaded. Returns `ref' if an entry could not be found."
            (fboundp 'bibtex-completion-get-entry)
            (fboundp 'orb--pre-expand-template)
            (boundp 'orb-preformat-keywords))
-      (if-let ((entry (bibtex-completion-get-entry ref))
+      (if-let* ((entry (bibtex-completion-get-entry ref))
                (orb-preformat-keywords
                 (append orb-preformat-keywords
                         '("author-abbrev" "year" "title"))))
@@ -360,7 +396,7 @@ see https://github.com/org-roam/org-roam-bibtex/blob/919ec8d837a7a3bd25232bdba17
 but is has been adapted to operate on a sting instead of a node. Requires
 `org-ref' to be loaded. Returns the `key' or nil if the format does not match
 the `org-ref-cite-re'"
-  (if-let ((boundp 'org-ref-cite-re)
+  (if-let* (((boundp 'org-ref-cite-re))
            (citekey-list (split-string-and-unquote citekey)))
       (catch 'found
         (dolist (c citekey-list)
@@ -379,9 +415,8 @@ Returns the node with an updated title if the current node is a reference node
 and the key was found in the bibliography, otherwise the node is returned
 unchanged."
   (if-let* (org-roam-ui-retitle-ref-nodes
-            ;; set a fake var because if-let(((boundp 'fake-var))) returns true
-            (orcr (boundp 'org-ref-cite-re))
-            (citekey (cdr (assoc "ROAM_REFS" (nth 5 node))))
+            ((boundp 'org-ref-cite-re))
+            (citekey (cdr (assoc "ROAM_REFS" (nth 6 node))))
             (ref (org-roam-ui--citekey-to-ref citekey))
             (title (org-roam-ui--find-ref-title ref)))
       (org-roam-ui--replace-nth title 2 node)
@@ -588,7 +623,7 @@ from all other links."
                             org-attach-use-inheritance
                             nil))
           (sub-dirs (org-roam-ui-find-subdirectories)))
-      (websocket-send-text org-roam-ui-ws-socket
+      (websocket-send-text ws
                            (json-encode
                             `((type . "variables")
                               (data .
@@ -621,18 +656,18 @@ ROWS is the sql result, while COLUMN-NAMES is the columns to use."
 
 (defun org-roam-ui-get-theme ()
   "Attempt to bring the current theme into a standardized format."
-  (list `(bg . ,(face-background hl-line-face))
+  (list `(bg . ,(face-background (if (facep 'hl-line) 'hl-line 'default)))
         `(bg-alt . ,(face-background 'default))
         `(fg . ,(face-foreground 'default))
-        `(fg-alt . ,(face-foreground font-lock-comment-face))
+        `(fg-alt . ,(face-foreground 'font-lock-comment-face))
         `(red . ,(face-foreground 'error))
         `(orange . ,(face-foreground 'warning))
-        `(yellow . ,(face-foreground font-lock-builtin-face))
+        `(yellow . ,(face-foreground 'font-lock-builtin-face))
         `(green . ,(face-foreground 'success))
-        `(cyan . ,(face-foreground font-lock-constant-face))
-        `(blue . ,(face-foreground font-lock-keyword-face))
-        `(violet . ,(face-foreground font-lock-constant-face))
-        `(magenta . ,(face-foreground font-lock-preprocessor-face))))
+        `(cyan . ,(face-foreground 'font-lock-constant-face))
+        `(blue . ,(face-foreground 'font-lock-keyword-face))
+        `(violet . ,(face-foreground 'font-lock-constant-face))
+        `(magenta . ,(face-foreground 'font-lock-preprocessor-face))))
 
 (defun org-roam-ui-find-subdirectories ()
   "Find all the subdirectories in the org-roam directory.
@@ -655,7 +690,8 @@ Hides . directories."
   (interactive)
   (unless org-roam-ui-mode (org-roam-ui-mode))
   (funcall org-roam-ui-browser-function
-           (format "http://localhost:%d" org-roam-ui-port)))
+           (format "http://localhost:%d?wsPort=%d"
+                   org-roam-ui-port org-roam-ui-ws-port)))
 
 ;;;###autoload
 (defun org-roam-ui-node-zoom (&optional id speed padding)
@@ -666,7 +702,7 @@ The ID of the node you want to travel to.
 The SPEED in ms it takes to make the transition.
 The PADDING around the nodes in the viewport."
   (interactive)
-  (if-let ((node (or id (org-roam-id-at-point))))
+  (if-let* ((node (or id (org-roam-id-at-point))))
       (websocket-send-text org-roam-ui-ws-socket
                            (json-encode `((type . "command")
                                           (data . ((commandName . "zoom")
@@ -681,7 +717,7 @@ The PADDING around the nodes in the viewport."
   "Open the local graph view of the current node.
 Optionally with ID (string), SPEED (number, ms) and PADDING (number, px)."
   (interactive)
-  (if-let ((node (or id (org-roam-id-at-point))))
+  (if-let* ((node (or id (org-roam-id-at-point))))
       (websocket-send-text org-roam-ui-ws-socket
                            (json-encode `((type . "command")
                                           (data . ((commandName . "local")
@@ -694,7 +730,7 @@ Optionally with ID (string), SPEED (number, ms) and PADDING (number, px)."
 (defun org-roam-ui-change-local-graph (&optional id manipulation)
   "Add or remove current node to the local graph. If not in local mode, open local-graph for this node."  
   (interactive)
-  (if-let ((node (or id (org-roam-id-at-point))))
+  (if-let* ((node (or id (org-roam-id-at-point))))
       (websocket-send-text org-roam-ui-ws-socket
                            (json-encode `((type . "command")
                                           (data . ((commandName . "change-local-graph")
@@ -723,10 +759,10 @@ Optionally with ID (string), SPEED (number, ms) and PADDING (number, px)."
                                       (data . ,(org-roam-ui--update-theme))))))
 
 ;;; Obsolete commands
-(define-obsolete-function-alias #'orui-open #'org-roam-ui-open "0.1")
-(define-obsolete-function-alias #'orui-node-local #'org-roam-ui-node-local "0.1")
-(define-obsolete-function-alias #'orui-node-zoom #'org-roam-ui-node-zoom "0.1")
-(define-obsolete-function-alias #'orui-sync-theme #'org-roam-ui-sync-theme "0.1")
+(define-obsolete-function-alias 'orui-open #'org-roam-ui-open "0.1")
+(define-obsolete-function-alias 'orui-node-local #'org-roam-ui-node-local "0.1")
+(define-obsolete-function-alias 'orui-node-zoom #'org-roam-ui-node-zoom "0.1")
+(define-obsolete-function-alias 'orui-sync-theme #'org-roam-ui-sync-theme "0.1")
 
 ;;;###autoload
 (define-minor-mode org-roam-ui-follow-mode

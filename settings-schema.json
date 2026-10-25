@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "preferences": {
+    "3d": "boolean",
+    "tagCols": {
+      "*": "string"
+    },
+    "colorTheme": [
+      "string",
+      {
+        "*": "string"
+      }
+    ],
+    "highlightColor": "string",
+    "sidebarWidth": "number",
+    "mainWindowWidth": "number",
+    "showTweaks": "boolean",
+    "justification": {
+      "enum": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    "outline": "boolean",
+    "physics": {
+      "enabled": "boolean",
+      "charge": "number",
+      "collision": "boolean",
+      "collisionStrength": "number",
+      "centering": "boolean",
+      "centeringStrength": "number",
+      "linkStrength": "number",
+      "linkIts": "number",
+      "alphaDecay": "number",
+      "alphaTarget": "number",
+      "alphaMin": "number",
+      "velocityDecay": "number",
+      "gravity": "number",
+      "gravityOn": "boolean",
+      "gravityLocal": "boolean"
+    },
+    "filter": {
+      "orphans": "boolean",
+      "dailies": "boolean",
+      "parent": {
+        "enum": [
+          "",
+          "parent",
+          "heading"
+        ]
+      },
+      "filelessCites": "boolean",
+      "tagsBlacklist": [
+        "string"
+      ],
+      "tagsWhitelist": [
+        "string"
+      ],
+      "dirsBlocklist": [
+        "string"
+      ],
+      "dirsAllowlist": [
+        "string"
+      ],
+      "bad": "boolean",
+      "noter": "boolean"
+    },
+    "visuals": {
+      "particles": "boolean",
+      "particlesNumber": "number",
+      "particlesWidth": "number",
+      "arrows": "boolean",
+      "arrowsLength": "number",
+      "arrowsPos": "number",
+      "arrowsColor": "string",
+      "linkOpacity": "number",
+      "linkWidth": "number",
+      "nodeRel": "number",
+      "nodeOpacity": "number",
+      "nodeResolution": "number",
+      "labels": "number",
+      "labelScale": "number",
+      "labelFontSize": "number",
+      "labelLength": "number",
+      "labelWordWrap": "number",
+      "labelLineSpace": "number",
+      "labelDynamicDegree": "number",
+      "labelDynamicStrength": "number",
+      "highlight": "boolean",
+      "highlightNodeSize": "number",
+      "highlightLinkSize": "number",
+      "highlightFade": "number",
+      "highlightAnim": "boolean",
+      "animationSpeed": "number",
+      "algorithmName": {
+        "enum": [
+          "Linear",
+          "QuadraticIn",
+          "QuadraticOut",
+          "QuadraticInOut",
+          "CubicIn",
+          "CubicOut",
+          "CubicInOut",
+          "QuarticIn",
+          "QuarticOut",
+          "QuarticInOut",
+          "QuinticIn",
+          "QuinticOut",
+          "QuinticInOut",
+          "SinusoidalIn",
+          "SinusoidalOut",
+          "SinusoidalInOut",
+          "ExponentialIn",
+          "ExponentialOut",
+          "ExponentialInOut",
+          "CircularIn",
+          "CircularOut",
+          "CircularInOut",
+          "ElasticIn",
+          "ElasticOut",
+          "ElasticInOut",
+          "BackIn",
+          "BackOut",
+          "BackInOut",
+          "BounceIn",
+          "BounceOut",
+          "BounceInOut"
+        ]
+      },
+      "linkColorScheme": "string",
+      "nodeColorScheme": [
+        "string"
+      ],
+      "nodeHighlight": "string",
+      "linkHighlight": "string",
+      "backgroundColor": "string",
+      "emacsNodeColor": "string",
+      "labelTextColor": "string",
+      "labelBackgroundColor": "string",
+      "labelBackgroundOpacity": "number",
+      "citeDashes": "boolean",
+      "citeDashLength": "number",
+      "citeGapLength": "number",
+      "citeLinkColor": "string",
+      "citeLinkHighlightColor": "string",
+      "citeNodeColor": "string",
+      "refDashes": "boolean",
+      "refDashLength": "number",
+      "refGapLength": "number",
+      "refLinkColor": "string",
+      "refLinkHighlightColor": "string",
+      "refNodeColor": "string",
+      "nodeSizeLinks": "number",
+      "nodeZoomSize": "number"
+    },
+    "behavior": {
+      "follow": {
+        "enum": [
+          "color",
+          "local",
+          "zoom"
+        ]
+      },
+      "localSame": {
+        "enum": [
+          "add",
+          "replace"
+        ]
+      },
+      "zoomPadding": "number",
+      "zoomSpeed": "number"
+    },
+    "mouse": {
+      "highlight": "string",
+      "local": "string",
+      "follow": "string",
+      "context": "string",
+      "preview": "string",
+      "backgroundExitsLocal": "boolean"
+    },
+    "local": {
+      "neighbors": "number"
+    },
+    "coloring": {
+      "method": {
+        "enum": [
+          "degree",
+          "community"
+        ]
+      }
+    }
+  }
+}

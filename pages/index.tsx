@@ -9,6 +9,7 @@ import {
   useDisclosure,
   useOutsideClick,
   useTheme,
+  useToast,
 } from '@chakra-ui/react'
 import { useAnimation } from '@lilib/hooks'
 import { useWindowSize, useWindowWidth } from '@react-hook/window-size'
@@ -53,6 +54,9 @@ import { Tweaks } from '../components/Tweaks'
 import { usePersistantState } from '../util/persistant-state'
 import { ThemeContext, ThemeContextProps } from '../util/themecontext'
 import { openNodeInEmacs } from '../util/webSocketFunctions'
+import { getWebSocketUrl } from '../util/webSocketUrl'
+import { createSettingsClient, SETTINGS_CHANGED_EVENT } from '../util/settings-manager'
+import { SettingsContext } from '../util/settingsContext'
 import { drawLabels } from '../components/Graph/drawLabels'
 import { VariablesContext } from '../util/variablesContext'
 import { findNthNeighbors } from '../util/findNthNeighbour'
@@ -101,7 +105,7 @@ export default function Home() {
   }, [])
 
   if (!showPage) {
-    return null
+    return <Box role="status" p={4}>Loading Org-roam UI… If this stays visible, check that your browser allows scripts and local connections for this page.</Box>
   }
   return (
     <>
@@ -114,6 +118,9 @@ export default function Home() {
 }
 
 export function GraphPage() {
+  const toast = useToast()
+  const toastRef = useRef(toast)
+  toastRef.current = toast
   const [threeDim, setThreeDim] = usePersistantState('3d', false)
   const [tagColors, setTagColors] = usePersistantState<TagColors>('tagCols', {})
   const [scope, setScope] = useState<Scope>({ nodeIds: [], excludedNodeIds: [] })
@@ -127,51 +134,6 @@ export function GraphPage() {
   const [mouse, setMouse] = usePersistantState('mouse', initialMouse)
   const [coloring, setColoring] = usePersistantState('coloring', initialColoring)
   const [local, setLocal] = usePersistantState('local', initialLocal)
-
-  // Add settings update listener
-  useEffect(() => {
-    const handleSettingsUpdate = (event: CustomEvent) => {
-      const { changedKeys } = event.detail;
-      
-      // Update state based on changed settings
-      changedKeys.forEach((key: string) => {
-        const value = JSON.parse(localStorage.getItem(key) ?? 'null');
-        if (!value) return;
-
-        switch (key) {
-          case 'tagCols':
-            setTagColors(value);
-            break;
-          case 'physics':
-            setPhysics(value);
-            break;
-          case 'filter':
-            setFilter(value);
-            break;
-          case 'visuals':
-            setVisuals(value);
-            break;
-          case 'behavior':
-            setBehavior(value);
-            break;
-          case 'mouse':
-            setMouse(value);
-            break;
-          case 'coloring':
-            setColoring(value);
-            break;
-          case 'local':
-            setLocal(value);
-            break;
-        }
-      });
-    };
-
-    window.addEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
-    return () => {
-      window.removeEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
-    };
-  }, [setTagColors, setPhysics, setFilter, setVisuals, setBehavior, setMouse, setColoring, setLocal]);
 
   const [
     previewNodeState,
@@ -402,6 +364,8 @@ export function GraphPage() {
   const behaviorRef = useRef(initialBehavior)
   behaviorRef.current = behavior
   const WebSocketRef = useRef<ReconnectingWebSocket | null>(null)
+  const settingsClientRef = useRef<ReturnType<typeof createSettingsClient> | null>(null)
+  const [connection, setConnection] = useState<'connecting' | 'loading' | 'ready' | 'disconnected'>('connecting')
 
   scopeRef.current = scope
   const followBehavior = (
@@ -474,16 +438,30 @@ export function GraphPage() {
   }
 
   useEffect(() => {
-    // initialize websocket
-    WebSocketRef.current = new ReconnectingWebSocket('ws://localhost:35903')
-    WebSocketRef.current.addEventListener('open', () => {
-      console.log('Connection with Emacs established')
+    const socket = new ReconnectingWebSocket(getWebSocketUrl(window.location))
+    WebSocketRef.current = socket
+    const settings = createSettingsClient(
+      socket, localStorage,
+      () => window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT)),
+      { onError: (description) => toastRef.current({ title: 'Settings could not be loaded', description, status: 'error', duration: 8000, isClosable: true }) },
+    )
+    settingsClientRef.current = settings
+    socket.addEventListener('open', () => {
+      setConnection('loading')
+      settings.ready()
     })
+    socket.addEventListener('close', () => {
+      setConnection('disconnected')
+      settings.disconnect()
+    })
+    socket.addEventListener('error', () => setConnection('disconnected'))
     WebSocketRef.current.addEventListener('message', (event: any) => {
       const bh = behaviorRef.current
       const message = JSON.parse(event.data)
+      if (settings.handleMessage(message)) return
       switch (message.type) {
         case 'graphdata':
+          setConnection('ready')
           return updateGraphData(message.data)
         case 'variables':
           setEmacsVariables(message.data)
@@ -523,6 +501,11 @@ export function GraphPage() {
           }
       }
     })
+    return () => {
+      settings.disconnect()
+      settingsClientRef.current = null
+      socket.close()
+    }
   }, [])
 
   useEffect(() => {
@@ -607,6 +590,11 @@ export function GraphPage() {
 
   return (
     <VariablesContext.Provider value={{ ...emacsVariables }}>
+      <SettingsContext.Provider value={{
+        connected: connection === 'loading' || connection === 'ready',
+        save: () => settingsClientRef.current?.save() ?? Promise.reject(new Error('Emacs is disconnected.')),
+        restore: () => settingsClientRef.current?.restore() ?? Promise.reject(new Error('Emacs is disconnected.')),
+      }}>
       <Box
         display="flex"
         alignItems="flex-start"
@@ -614,6 +602,13 @@ export function GraphPage() {
         height="100vh"
         overflow="clip"
       >
+        {connection !== 'ready' && (
+          <Box role="status" position="absolute" top={2} right={2} maxW="sm" p={3} bg="alt.100" color="black" borderRadius="md" zIndex="toast">
+            {connection === 'loading' ? 'Connected to Emacs. Loading graph…' :
+              connection === 'connecting' ? 'Connecting to Emacs…' :
+                'Disconnected from Emacs. Reconnecting… Check that Org-roam UI is running and your browser allows local connections.'}
+          </Box>
+        )}
         <Tweaks
           {...{
             physics,
@@ -767,6 +762,7 @@ export function GraphPage() {
           </div>
         )}
       </Box>
+      </SettingsContext.Provider>
     </VariablesContext.Provider>
   )
 }

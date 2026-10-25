@@ -31,10 +31,54 @@ Org-Roam-UI is meant a successor of [org-roam-server](https://github.com/org-roa
 For major new features/bugfixes we will update [changelog](https://github.com/org-roam/org-roam-ui/discussions/30).
 
 Recent Updates:
-- Fixed settings import functionality to handle theme changes gracefully
-- Improved error handling and state management during settings updates
-- Added proper validation for imported settings
-- Fixed client-side exceptions during settings import
+- Shared settings saved directly in Emacs configuration, with automatic loading on page open
+- Explicit connection/loading status instead of a blank graph page
+- Emacs 31.1 compatibility, optional Org-ref handling, and reliable reference retitling
+
+## Shared graph preferences
+
+Use the Settings panel's **Save settings** and **Restore saved settings** buttons,
+or `M-x org-roam-ui-save-settings` and `M-x org-roam-ui-restore-settings`.
+There are no download, upload, external-file prompts, or browser automation.
+Both actions use the graph's existing WebSocket connection and report success
+only after the receiving side acknowledges completion.
+
+The default file is `~/.emacs.d/settings/org-roam-ui.json`, configured through
+`org-roam-ui-settings-file`. Keep it in your Emacs configuration's Git repository
+to share preferences between machines. Saving updates the file; it does not
+run Git or commit other configuration changes. In Taras's configuration,
+`SPC . S` saves and `SPC . R` restores.
+
+Opening the page checks whether this file exists and loads it automatically.
+If absent, browser preferences are preserved. Invalid files leave browser
+preferences intact and display an error. Reconnecting an already-open page
+does not discard unsaved adjustments; use Restore explicitly when needed.
+Saving from Emacs targets the most recently connected settings-capable browser;
+using the panel's buttons always targets that panel's own browser.
+
+The versioned file contains graph appearance and behavior preferences, not note
+contents, graph data, or transient node selections. Partial documents reset
+omitted preferences to the application's defaults. Writes are atomic and
+sorted for readable Git diffs. Unsaved edits to an open settings-file buffer
+are preserved rather than overwritten.
+
+HTTP responses are isolated while this UI is serving files. This avoids the
+HTTP server reusing a previous response buffer during concurrent asset requests,
+which otherwise can produce `Header already sent` errors and a stalled page.
+
+### Verification
+
+With the Emacs package dependencies installed:
+
+```sh
+npm test
+npx tsc --noEmit --incremental false
+npm run build
+npm run export
+emacs -Q --batch --eval '(progn (require (quote package)) (package-initialize))' \
+  -L . -l test/org-roam-ui-tests.el -l test/org-roam-ui-settings-tests.el \
+  -f ert-run-tests-batch-and-exit
+```
 
 ## Installation
 
@@ -107,6 +151,32 @@ We recommend only loading org-roam-ui after loading org(-roam) as starting the s
 
 Use `M-x org-roam-ui-mode RET` to enable the global mode.
 It will start a web server on http://127.0.0.1:35901/ and connect to it via a WebSocket for real-time updates.
+
+### Running alongside another Emacs session
+
+Each running Emacs needs its own HTTP and websocket ports. Disable
+`org-roam-ui-mode` before changing ports in an instance that is already running.
+For example:
+
+```emacs-lisp
+(setq org-roam-ui-port 36901
+      org-roam-ui-ws-port 36903)
+(org-roam-ui-open)
+```
+
+`org-roam-ui-open` includes the websocket port in the URL. When opening the page
+manually, use `http://127.0.0.1:36901?wsPort=36903`. The frontend connects to the
+same hostname as the page. The default ports remain 35901 and 35903.
+A port conflict leaves the mode disabled so it can be retried after choosing
+free ports. It does not take over another Emacs session's server.
+
+### Blank page troubleshooting
+
+A blank page with no controls can mean browser protection or an extension is
+blocking the application's scripts or local websocket. Check the browser's
+site-specific blocking report and developer console. Brave Shields was confirmed
+to cause this symptom. The HTTP server and websocket must both be reachable;
+a successful HTTP response alone does not prove that the browser ran the app.
 
 ### Commands
 
@@ -209,6 +279,23 @@ By default, org-roam-ui will try to open itself in your default browser. To disa
 ```emacs-lisp
 (setq org-roam-ui-open-on-start nil)
 ```
+
+## Development checks
+
+With the Emacs dependencies installed through `package.el`, run:
+
+```sh
+emacs -Q --batch --eval "(progn (require 'package) (package-initialize))" -L . -l test/org-roam-ui-tests.el -f ert-run-tests-batch-and-exit
+npm test
+npx tsc --noEmit
+npm run build
+npm run export
+```
+
+The Elisp regressions cover optional citation support, reference titles, port
+selection, failed startup recovery, and retrying a real websocket port conflict.
+The frontend check covers websocket addresses for default and alternate ports.
+Rebuild and export after frontend changes because Emacs serves `out/`.
 
 ## Disclaimers ‼
 

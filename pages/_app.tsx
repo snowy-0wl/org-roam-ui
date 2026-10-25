@@ -1,7 +1,7 @@
 import '../styles/globals.css'
 import type { AppProps } from 'next/app'
 import { ChakraProvider, extendTheme, withDefaultColorScheme } from '@chakra-ui/react'
-import { useEffect, useState, useMemo, useContext, useReducer } from 'react'
+import { useMemo, useContext } from 'react'
 import * as d3int from 'd3-interpolate'
 
 import { ThemeContext } from '../util/themecontext'
@@ -11,53 +11,8 @@ import { themes } from '../components/themes'
 function MyApp({ Component, pageProps }: AppProps) {
   type Theme = [string, { [color: string]: string }]
   const initialTheme: Theme = ['one-vibrant', themes['one-vibrant']]
-  const [isInitialized, setIsInitialized] = useState(false)
-
-  const [emacsTheme, setEmacsTheme] = useState<Theme>(initialTheme)
-  const [highlightColor, setHighlightColor] = useState('purple.500')
-
-  useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem('colorTheme', JSON.stringify(emacsTheme))
-    }
-  }, [emacsTheme])
-
-  useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem('highlightColor', JSON.stringify(highlightColor))
-    }
-  }, [highlightColor])
-
-  useEffect(() => {
-    // Load initial settings
-    setEmacsTheme(
-      JSON.parse(localStorage.getItem('colorTheme') ?? JSON.stringify(initialTheme)) ??
-        initialTheme,
-    )
-    setHighlightColor(
-      JSON.parse(localStorage.getItem('highlightColor') ?? JSON.stringify(highlightColor)) ??
-        highlightColor,
-    )
-    setIsInitialized(true)
-
-    // Listen for settings updates
-    const handleSettingsUpdate = (event: CustomEvent) => {
-      const { changedKeys } = event.detail;
-      if (changedKeys.includes('colorTheme')) {
-        const newTheme = JSON.parse(localStorage.getItem('colorTheme') ?? JSON.stringify(initialTheme)) ?? initialTheme;
-        setEmacsTheme(newTheme);
-      }
-      if (changedKeys.includes('highlightColor')) {
-        const newColor = JSON.parse(localStorage.getItem('highlightColor') ?? JSON.stringify(highlightColor)) ?? highlightColor;
-        setHighlightColor(newColor);
-      }
-    };
-
-    window.addEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
-    return () => {
-      window.removeEventListener('settingsUpdated', handleSettingsUpdate as EventListener);
-    };
-  }, [])
+  const [emacsTheme, setEmacsTheme] = usePersistantState<Theme>('colorTheme', initialTheme)
+  const [highlightColor, setHighlightColor] = usePersistantState('highlightColor', 'purple.500')
 
   const themeObject = {
     emacsTheme: emacsTheme,
@@ -211,7 +166,7 @@ function SubApp(props: any) {
         },
       },
     }
-  }, [highlightColor, JSON.stringify(emacsTheme)])
+  }, [highlightColor, themeColors, missingColor, borderColor])
 
   const extendedTheme = extendTheme(
     theme,
