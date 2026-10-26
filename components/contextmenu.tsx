@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   Box,
   Menu,
@@ -82,6 +82,7 @@ export const ContextMenu = (props: ContextMenuProps) => {
     filter,
   } = props
   const { isOpen, onOpen, onClose } = useDisclosure()
+  const [deleteTarget, setDeleteTarget] = useState<OrgRoamNode | null>(null)
   const copyRef = useRef<any>()
   return (
     <>
@@ -183,12 +184,15 @@ export const ContextMenu = (props: ContextMenuProps) => {
               >
                 Preview
               </MenuItem>
-              {target?.level === 0 && (
+              {target?.level === 0 && !target.properties?.FILELESS && (
                 <MenuItem
                   closeOnSelect={false}
                   icon={<DeleteIcon color="red.500" />}
                   color="red.500"
-                  onClick={onOpen}
+                  onClick={() => {
+                    setDeleteTarget(target)
+                    onOpen()
+                  }}
                 >
                   Permanently delete note
                 </MenuItem>
@@ -199,30 +203,23 @@ export const ContextMenu = (props: ContextMenuProps) => {
           )}
         </MenuList>
       </Menu>
-      {typeof target !== 'string' && (
+      {deleteTarget && (
         <Modal isCentered isOpen={isOpen} onClose={onClose}>
           <ModalOverlay />
           <ModalContent zIndex="popover">
-            <ModalHeader>Delete node?</ModalHeader>
+            <ModalHeader>Delete note?</ModalHeader>
             <ModalCloseButton />
             <ModalBody>
               <VStack spacing={4} display="flex" alignItems="flex-start">
-                <Text>This will permanently delete your note:</Text>
-                <Text fontWeight="bold">{target?.title}</Text>
-                {target?.level !== 0 && (
-                  <Text>
-                    This will only delete the from this heading until but not including the next
-                    node. Your parent file and all other nodes will not be deleted.
-                  </Text>
-                )}
-                <Text>Are you sure you want to do continue?</Text>
+                <Text>This will permanently delete the entire note file:</Text>
+                <Text fontWeight="bold">{deleteTarget.title}</Text>
+                <Text>Are you sure you want to continue?</Text>
               </VStack>
             </ModalBody>
             <ModalFooter>
               <Button
                 mr={3}
                 onClick={() => {
-                  console.log('closing')
                   onClose()
                   menuClose()
                 }}
@@ -234,13 +231,12 @@ export const ContextMenu = (props: ContextMenuProps) => {
                 colorScheme="red"
                 ml={3}
                 onClick={() => {
-                  console.log('aaaaa')
-                  deleteNodeInEmacs(target!, webSocket)
+                  deleteNodeInEmacs(deleteTarget, webSocket)
                   onClose()
                   menuClose()
                 }}
               >
-                Delete node
+                Delete note
               </Button>
             </ModalFooter>
           </ModalContent>

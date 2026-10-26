@@ -17,7 +17,7 @@ export function deleteNodeInEmacs(node: OrgRoamNode, webSocket: ReconnectingWebS
     if (node.level !== 0) {
         return
     }
-    sendMessageToEmacs('delete', { id: node.id, file: node.file }, webSocket)
+    sendMessageToEmacs('delete', { id: node.id }, webSocket)
 }
 
 export function createNodeInEmacs(node: OrgRoamNode, webSocket: ReconnectingWebSocket) {

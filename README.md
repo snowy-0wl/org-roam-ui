@@ -170,6 +170,11 @@ same hostname as the page. The default ports remain 35901 and 35903.
 A port conflict leaves the mode disabled so it can be retried after choosing
 free ports. It does not take over another Emacs session's server.
 
+The HTTP and WebSocket servers listen locally. WebSocket connections are accepted
+only from the local UI origin on the configured HTTP port. Delete requests are
+resolved by Org-roam node ID, and only file-level nodes without unsaved changes
+can be deleted.
+
 ### Blank page troubleshooting
 
 A blank page with no controls can mean browser protection or an extension is

@@ -206,7 +206,7 @@ This serves the web-build and API over HTTP."
             (progn
               (setq httpd-port org-roam-ui-port
                     httpd-root org-roam-ui-app-build-dir)
-              (httpd-start)
+              (let ((httpd-host 'local)) (httpd-start))
               (setq httpd-started t
                     org-roam-ui-ws-server
                     (websocket-server
@@ -231,9 +231,18 @@ This serves the web-build and API over HTTP."
     (remove-hook 'after-save-hook #'org-roam-ui--on-save)
     (org-roam-ui-follow-mode -1))))
 
+(defun org-roam-ui--trusted-origin-p (ws)
+  "Return non-nil if WS was opened by the local UI on its configured port."
+  (member (websocket-origin ws)
+          (mapcar (lambda (host) (format "http://%s:%d" host org-roam-ui-port))
+                  '("localhost" "127.0.0.1" "[::1]"))))
+
 (defun org-roam-ui--ws-on-open (ws)
   "Open the websocket WS to org-roam-ui and send initial data."
-  (progn
+  (if (not (org-roam-ui--trusted-origin-p ws))
+      (progn
+        (message "Rejected org-roam-ui websocket with untrusted origin")
+        (websocket-close ws))
     (setq org-roam-ui-ws-socket ws)
     (org-roam-ui--send-variables org-roam-ui-ws-socket)
     (org-roam-ui--send-graphdata)
@@ -246,6 +255,9 @@ This serves the web-build and API over HTTP."
 (defun org-roam-ui--ws-on-message (ws frame)
   "Functions to run when the org-roam-ui server receives a message.
 Takes _WS and FRAME as arguments."
+  (unless (org-roam-ui--trusted-origin-p ws)
+    (websocket-close ws)
+    (error "Rejected org-roam-ui websocket with untrusted origin"))
   (let* ((msg (json-parse-string
                (websocket-frame-text frame) :object-type 'alist))
          (command (alist-get 'command msg))
@@ -287,14 +299,19 @@ Takes _WS and FRAME as arguments."
     (run-hook-with-args 'org-roam-ui-after-open-node-functions id)))
 
 (defun org-roam-ui--on-msg-delete-node (data)
-  "Delete a node when receiving DATA from the websocket.
-
-TODO: Be able to delete individual nodes."
-  (progn
-    (message "Deleted %s" (alist-get 'file data))
-    (delete-file (alist-get 'file data))
-    (org-roam-db-sync)
-    (org-roam-ui--send-graphdata)))
+  "Delete a file-level node identified by DATA, never a client-supplied path."
+  (let* ((id (alist-get 'id data))
+         (node (and (stringp id) (org-roam-node-from-id id))))
+    (unless (and node (zerop (org-roam-node-level node)))
+      (error "No file-level Org-roam node for deletion"))
+    (let* ((file (org-roam-node-file node))
+           (buffer (get-file-buffer file)))
+      (when (and buffer (buffer-modified-p buffer))
+        (error "Cannot delete a note with unsaved changes"))
+      (delete-file file)
+      (org-roam-db-sync)
+      (org-roam-ui--send-graphdata)
+      (message "Deleted %s" file))))
 
 (defun org-roam-ui--on-msg-create-node (data)
   "Create a node when receiving DATA from the websocket."
@@ -308,9 +325,11 @@ TODO: Be able to delete individual nodes."
 (defun org-roam-ui--ws-on-close (websocket)
   "Clean up when WEBSOCKET to org-roam-ui is closed."
   (org-roam-ui-settings-disconnect websocket)
-  (remove-hook 'after-save-hook #'org-roam-ui--on-save)
-  (org-roam-ui-follow-mode -1)
-  (message "Connection with org-roam-ui closed."))
+  (when (eq websocket org-roam-ui-ws-socket)
+    (setq org-roam-ui-ws-socket nil)
+    (remove-hook 'after-save-hook #'org-roam-ui--on-save)
+    (org-roam-ui-follow-mode -1)
+    (message "Connection with org-roam-ui closed.")))
 
 (defun org-roam-ui--get-text (id)
   "Retrieve the text from org-node ID."
